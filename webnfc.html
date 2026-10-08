@@ -1,11 +1,23 @@
 <!DOCTYPE html>
 <html lang="ja">
 <head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width,initial-scale=1">
-<title>NFC Reader</title>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Web NFC Inspector</title>
 
 <style>
+:root{
+  --bg:#0f172a;
+  --card:#1e293b;
+  --card2:#111827;
+  --text:#f8fafc;
+  --muted:#94a3b8;
+  --success:#22c55e;
+  --error:#ef4444;
+  --info:#3b82f6;
+  --border:#334155;
+}
+
 *{
   margin:0;
   padding:0;
@@ -13,158 +25,368 @@
 }
 
 body{
-  background:#0f172a;
-  color:white;
+  background:var(--bg);
   min-height:100vh;
-  display:flex;
-  justify-content:center;
-  align-items:center;
-  font-family:-apple-system,BlinkMacSystemFont,sans-serif;
+  color:var(--text);
+  font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;
+  padding:20px;
+}
+
+.container{
+  max-width:800px;
+  margin:auto;
 }
 
 .card{
-  width:min(420px,90vw);
-  background:#1e293b;
-  border-radius:32px;
-  padding:32px;
+  background:var(--card);
+  border-radius:24px;
+  padding:24px;
+  margin-bottom:16px;
+}
+
+.center{
   text-align:center;
-  box-shadow:0 20px 60px rgba(0,0,0,.4);
 }
 
 .icon{
   font-size:72px;
-  margin:20px 0;
+  margin:16px 0;
 }
 
 .status{
-  font-size:24px;
+  font-size:28px;
   font-weight:700;
-  margin-top:12px;
 }
 
 .message{
-  opacity:.8;
-  margin-top:8px;
-}
-
-.result{
-  margin-top:24px;
-  padding:16px;
-  border-radius:16px;
-  background:#0f172a;
-  word-break:break-all;
-  text-align:left;
+  margin-top:10px;
+  color:var(--muted);
 }
 
 .waiting{
-  color:#60a5fa;
+  color:var(--info);
 }
 
 .success{
-  color:#4ade80;
+  color:var(--success);
 }
 
 .error{
-  color:#f87171;
+  color:var(--error);
+}
+
+.badge{
+  display:inline-block;
+  padding:6px 12px;
+  border-radius:999px;
+  background:#1d4ed8;
+  margin-top:12px;
+}
+
+.section-title{
+  font-size:18px;
+  font-weight:700;
+  margin-bottom:12px;
+}
+
+.row{
+  margin-bottom:12px;
+}
+
+.label{
+  color:var(--muted);
+  font-size:13px;
+  margin-bottom:4px;
+}
+
+.value{
+  background:var(--card2);
+  border:1px solid var(--border);
+  border-radius:12px;
+  padding:12px;
+  overflow-wrap:anywhere;
+}
+
+.record{
+  border:1px solid var(--border);
+  border-radius:16px;
+  padding:16px;
+  margin-bottom:16px;
+}
+
+.type{
+  color:#60a5fa;
+  font-weight:700;
+  margin-bottom:10px;
+}
+
+pre{
+  white-space:pre-wrap;
+  word-break:break-word;
+}
+
+button{
+  border:none;
+  background:#2563eb;
+  color:white;
+  padding:14px 18px;
+  border-radius:12px;
+  width:100%;
+  cursor:pointer;
+  font-size:16px;
+}
+
+button:hover{
+  opacity:0.9;
 }
 </style>
 </head>
 
 <body>
 
-<div class="card">
+<div class="container">
 
-  <h1>NFC Reader</h1>
+  <div class="card center">
 
-  <div class="icon">📶</div>
+    <h1>Web NFC Inspector</h1>
 
-  <div id="status" class="status waiting">
-    起動中...
+    <div class="icon">📶</div>
+
+    <div id="status" class="status waiting">
+      起動中...
+    </div>
+
+    <div id="message" class="message">
+      初期化しています
+    </div>
+
+    <div class="badge">
+      Android Chrome 推奨
+    </div>
+
   </div>
 
-  <div id="message" class="message">
+  <div class="card">
+    <button onclick="startScan()">
+      NFCスキャン開始
+    </button>
   </div>
 
-  <div id="result" class="result" style="display:none">
-  </div>
+  <div id="output"></div>
 
 </div>
 
 <script>
 
+const output = document.getElementById("output");
 const statusEl = document.getElementById("status");
 const messageEl = document.getElementById("message");
-const resultEl = document.getElementById("result");
 
-function waiting(msg){
-  statusEl.className="status waiting";
+function setWaiting(msg){
   statusEl.textContent="待機中";
+  statusEl.className="status waiting";
   messageEl.textContent=msg;
 }
 
-function success(msg){
-  statusEl.className="status success";
+function setSuccess(msg){
   statusEl.textContent="タグ検出";
+  statusEl.className="status success";
   messageEl.textContent=msg;
 }
 
-function error(msg){
-  statusEl.className="status error";
+function setError(msg){
   statusEl.textContent="エラー";
+  statusEl.className="status error";
   messageEl.textContent=msg;
 }
 
-async function start(){
+function hex(buffer){
+  const bytes = new Uint8Array(buffer);
+
+  return [...bytes]
+    .map(v => v.toString(16).padStart(2,"0"))
+    .join(" ");
+}
+
+function decodeText(record){
+
+  try{
+    return new TextDecoder().decode(record.data);
+  }
+  catch{
+    return "decode失敗";
+  }
+
+}
+
+async function startScan(){
+
+  output.innerHTML = "";
 
   if(!("NDEFReader" in window)){
-    error("Web NFC未対応ブラウザ");
+    setError("このブラウザはWeb NFCに未対応です");
     return;
   }
 
-  try {
+  try{
 
     const ndef = new NDEFReader();
 
     await ndef.scan();
 
-    waiting("タグを近づけてください");
+    setWaiting("タグを近づけてください");
+
+    ndef.addEventListener("readingerror", () => {
+
+      setError("タグ読み取り失敗");
+
+    });
 
     ndef.addEventListener("reading", event => {
 
       navigator.vibrate?.(200);
 
-      success("読み取り成功");
+      setSuccess("読み取り成功");
 
-      resultEl.style.display="block";
+      let html = "";
 
-      let text="";
+      html += `
+      <div class="card">
+
+        <div class="section-title">
+          タグ情報
+        </div>
+
+        <div class="row">
+          <div class="label">Serial Number</div>
+          <div class="value">
+            ${event.serialNumber || "不明"}
+          </div>
+        </div>
+
+        <div class="row">
+          <div class="label">Record Count</div>
+          <div class="value">
+            ${event.message.records.length}
+          </div>
+        </div>
+
+      </div>
+      `;
+
+      let index=1;
 
       for(const record of event.message.records){
 
+        let decoded = "";
+
         try{
-          text +=
-          new TextDecoder().decode(record.data)
-          + "\n";
-        }catch(e){
-          text += "[record detected]\n";
+          decoded = decodeText(record);
+        }catch{
+          decoded = "";
         }
 
+        let extra = "";
+
+        if(record.recordType==="text"){
+
+          extra = `
+          <div class="row">
+            <div class="label">Text</div>
+            <div class="value">
+              ${decoded}
+            </div>
+          </div>
+          `;
+
+        }else if(record.recordType==="url"){
+
+          extra = `
+          <div class="row">
+            <div class="label">URL</div>
+            <div class="value">
+              <a href="${decoded}" target="_blank">
+                ${decoded}
+              </a>
+            </div>
+          </div>
+          `;
+
+        }else{
+
+          extra = `
+          <div class="row">
+            <div class="label">Decoded</div>
+            <div class="value">
+              ${decoded}
+            </div>
+          </div>
+          `;
+
+        }
+
+        html += `
+        <div class="card">
+
+          <div class="section-title">
+            Record ${index}
+          </div>
+
+          <div class="record">
+
+            <div class="type">
+              ${record.recordType}
+            </div>
+
+            <div class="row">
+              <div class="label">Media Type</div>
+              <div class="value">
+                ${record.mediaType || "-"}
+              </div>
+            </div>
+
+            <div class="row">
+              <div class="label">Record ID</div>
+              <div class="value">
+                ${record.id || "-"}
+              </div>
+            </div>
+
+            ${extra}
+
+            <div class="row">
+              <div class="label">Raw HEX</div>
+              <div class="value">
+                <pre>${hex(record.data)}</pre>
+              </div>
+            </div>
+
+          </div>
+
+        </div>
+        `;
+
+        index++;
       }
 
-      resultEl.textContent=text;
+      output.innerHTML = html;
 
     });
 
-    ndef.addEventListener("readingerror",()=>{
-      error("読み取りに失敗しました");
-    });
+  }catch(e){
 
-  } catch(e){
-    error(e.message);
+    setError(e.message);
+
+    console.error(e);
+
   }
 }
 
-start();
+if("NDEFReader" in window){
+  setWaiting("スキャン準備完了");
+}else{
+  setError("Web NFC未対応");
+}
 
 </script>
 
