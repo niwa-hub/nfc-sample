@@ -260,4 +260,67 @@ async function startScan(){
             <div class="label">recordType</div>
             <div class="value">
               ${record.recordType}
-   
+            </div>
+          </div>
+
+          <div class="section">
+            <div class="label">mediaType</div>
+            <div class="value">
+              ${record.mediaType || "-"}
+            </div>
+          </div>
+
+          <div class="section">
+            <div class="label">recordId</div>
+            <div class="value">
+              ${record.id || "-"}
+            </div>
+          </div>
+        `;
+
+        if(decoded && decoded.trim()){
+
+          html += `
+          <div class="section">
+            <div class="label">内容</div>
+            <div class="value">
+              <pre>${decoded}</pre>
+            </div>
+          </div>
+          `;
+        }
+
+        html += `
+          <div class="section">
+            <div class="label">HEX</div>
+            <div class="value">
+              <pre>${rawHex}</pre>
+            </div>
+          </div>
+
+        </div>
+        `;
+      });
+
+      output.innerHTML = html;
+
+    });
+
+  }catch(e){
+
+    setError(e.message);
+
+  }
+
+}
+
+if("NDEFReader" in window){
+  setWaiting("スキャン開始を押してください");
+}else{
+  setError("Web NFC未対応");
+}
+
+</script>
+
+</body>
+</html>
