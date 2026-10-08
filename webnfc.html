@@ -1,28 +1,48 @@
 <!DOCTYPE html>
 <html>
 <body>
-<button id="scan">NFCを読む</button>
+<h1>Web NFC Test</h1>
+
+<button id="scan">Start Scan</button>
+
+<pre id="log"></pre>
 
 <script>
+const log = msg => {
+  document.getElementById("log").textContent += msg + "\n";
+};
+
 document.getElementById("scan").onclick = async () => {
+  log("ボタン押下");
+
+  if (!("NDEFReader" in window)) {
+    log("Web NFC未対応");
+    return;
+  }
+
   try {
     const ndef = new NDEFReader();
 
+    log("scan開始");
+
     await ndef.scan();
 
-    console.log("スキャン開始");
+    log("タグ待機中");
 
-    ndef.addEventListener("reading", ({ message }) => {
-      for (const record of message.records) {
-        if (record.recordType === "text") {
-          const text = new TextDecoder().decode(record.data);
-          alert(text);
-        }
-      }
+    ndef.addEventListener("reading", event => {
+      log("タグ検出");
+      console.log(event);
     });
-  } catch (err) {
-    console.error(err);
+
+    ndef.addEventListener("readingerror", () => {
+      log("読み取り失敗");
+    });
+
+  } catch (e) {
+    log("ERROR: " + e.message);
+    console.error(e);
   }
 };
 </script>
 </body>
+</html>
