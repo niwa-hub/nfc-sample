@@ -10,7 +10,7 @@
 :root{
   --bg:#0f172a;
   --card:#1e293b;
-  --card2:#0b1220;
+  --card2:#111827;
   --text:#f8fafc;
   --sub:#94a3b8;
   --blue:#3b82f6;
@@ -47,14 +47,19 @@ body{
   text-align:center;
 }
 
-.icon{
-  font-size:72px;
-  margin:12px 0;
+button{
+  width:100%;
+  border:none;
+  border-radius:16px;
+  padding:16px;
+  background:var(--blue);
+  color:white;
+  font-size:16px;
 }
 
 .status{
-  font-size:26px;
-  font-weight:700;
+  font-size:28px;
+  font-weight:bold;
 }
 
 .waiting{
@@ -70,49 +75,21 @@ body{
 }
 
 .message{
-  margin-top:10px;
   color:var(--sub);
-}
-
-button{
-  width:100%;
-  border:none;
-  background:var(--blue);
-  color:white;
-  padding:16px;
-  border-radius:16px;
-  font-size:16px;
-}
-
-.section{
-  margin-top:12px;
+  margin-top:8px;
 }
 
 .label{
   color:var(--sub);
-  font-size:13px;
   margin-bottom:4px;
+  font-size:13px;
 }
 
 .value{
   background:var(--card2);
-  border-radius:12px;
   padding:12px;
-  overflow-wrap:anywhere;
-}
-
-.record{
-  margin-top:12px;
-  border:1px solid rgba(255,255,255,.07);
-  border-radius:16px;
-  padding:16px;
-}
-
-.type{
-  font-size:18px;
-  font-weight:700;
-  color:#60a5fa;
-  margin-bottom:12px;
+  border-radius:12px;
+  overflow:auto;
 }
 
 pre{
@@ -127,19 +104,15 @@ pre{
 <div class="container">
 
   <div class="card center">
-
-    <h1>📶 NFC Inspector</h1>
-
-    <div class="icon">📡</div>
+    <h1>📶 Web NFC Inspector</h1>
 
     <div id="status" class="status waiting">
       Ready
     </div>
 
     <div id="message" class="message">
-      NFCスキャン待機
+      スキャン開始してください
     </div>
-
   </div>
 
   <div class="card">
@@ -158,43 +131,67 @@ const output = document.getElementById("output");
 const statusEl = document.getElementById("status");
 const messageEl = document.getElementById("message");
 
-function hex(buffer){
-  return [...new Uint8Array(buffer)]
-    .map(v => v.toString(16).padStart(2,"0"))
-    .join(" ");
+function setWaiting(msg){
+  statusEl.textContent = "待機中";
+  statusEl.className = "status waiting";
+  messageEl.textContent = msg;
 }
 
-function tryDecode(record){
+function setSuccess(msg){
+  statusEl.textContent = "タグ検出";
+  statusEl.className = "status success";
+  messageEl.textContent = msg;
+}
+
+function setError(msg){
+  statusEl.textContent = "エラー";
+  statusEl.className = "status error";
+  messageEl.textContent = msg;
+}
+
+function safe(v){
+  try{
+    if(v === undefined) return "[undefined]";
+    if(v === null) return "[null]";
+    return String(v);
+  }catch(e){
+    return "[error]";
+  }
+}
+
+function inspect(obj){
+
+  const result = {};
 
   try{
-    return new TextDecoder().decode(record.data);
-  }catch{
-    return null;
+
+    const proto =
+      Object.getPrototypeOf(obj);
+
+    result.__prototype_properties =
+      Object.getOwnPropertyNames(proto);
+
+    for(const key of result.__prototype_properties){
+
+      try{
+        result[key] = obj[key];
+      }catch(e){
+        result[key] = "[access error]";
+      }
+    }
+
+  }catch(e){
+
+    result.error = e.message;
+
   }
 
-}
-
-function setWaiting(text){
-  statusEl.textContent="待機中";
-  statusEl.className="status waiting";
-  messageEl.textContent=text;
-}
-
-function setSuccess(text){
-  statusEl.textContent="検出";
-  statusEl.className="status success";
-  messageEl.textContent=text;
-}
-
-function setError(text){
-  statusEl.textContent="エラー";
-  statusEl.className="status error";
-  messageEl.textContent=text;
+  return result;
 }
 
 async function startScan(){
 
-  output.innerHTML="";
+  output.innerHTML = "";
 
   if(!("NDEFReader" in window)){
     setError("Web NFC未対応");
@@ -207,9 +204,9 @@ async function startScan(){
 
     await ndef.scan();
 
-    setWaiting("タグを近づけてください");
+    setWaiting("タグを近付けてください");
 
-    ndef.addEventListener("readingerror", ()=>{
+    ndef.addEventListener("readingerror", () => {
 
       setError("読み取り失敗");
 
@@ -219,88 +216,61 @@ async function startScan(){
 
       navigator.vibrate?.(200);
 
-      setSuccess("タグ検出");
+      setSuccess("読み取り成功");
 
       let html = "";
 
       html += `
       <div class="card">
-
-        <div class="section">
-          <div class="label">UID</div>
-          <div class="value">
-            ${event.serialNumber || "なし"}
-          </div>
+        <div class="label">Serial Number</div>
+        <div class="value">
+          ${safe(event.serialNumber)}
         </div>
-
-        <div class="section">
-          <div class="label">Record Count</div>
-          <div class="value">
-            ${event.message.records.length}
-          </div>
-        </div>
-
       </div>
       `;
 
-      event.message.records.forEach((record,index)=>{
+      let i = 1;
 
-        const decoded = tryDecode(record);
+      for(const record of event.message.records){
 
-        const rawHex = hex(record.data);
+        const details = inspect(record);
 
         html += `
         <div class="card">
 
-          <div class="type">
-            Record ${index + 1}
+          <h2>Record ${i}</h2>
+
+          <div class="label">
+            Prototype Properties
           </div>
 
-          <div class="section">
-            <div class="label">recordType</div>
-            <div class="value">
-              ${record.recordType}
-            </div>
+          <div class="value">
+            <pre>${JSON.stringify(
+              details.__prototype_properties,
+              null,
+              2
+            )}</pre>
           </div>
 
-          <div class="section">
-            <div class="label">mediaType</div>
-            <div class="value">
-              ${record.mediaType || "-"}
-            </div>
+          <br>
+
+          <div class="label">
+            Record Inspection
           </div>
 
-          <div class="section">
-            <div class="label">recordId</div>
-            <div class="value">
-              ${record.id || "-"}
-            </div>
-          </div>
-        `;
-
-        if(decoded && decoded.trim()){
-
-          html += `
-          <div class="section">
-            <div class="label">内容</div>
-            <div class="value">
-              <pre>${decoded}</pre>
-            </div>
-          </div>
-          `;
-        }
-
-        html += `
-          <div class="section">
-            <div class="label">HEX</div>
-            <div class="value">
-              <pre>${rawHex}</pre>
-            </div>
+          <div class="value">
+            <pre>${JSON.stringify(
+              details,
+              null,
+              2
+            )}</pre>
           </div>
 
         </div>
         `;
-      });
+
+        i++;
+      }
 
       output.innerHTML = html;
 
@@ -312,12 +282,6 @@ async function startScan(){
 
   }
 
-}
-
-if("NDEFReader" in window){
-  setWaiting("スキャン開始を押してください");
-}else{
-  setError("Web NFC未対応");
 }
 
 </script>
