@@ -1,0 +1,28 @@
+<!DOCTYPE html>
+<html>
+<body>
+<button id="scan">NFCを読む</button>
+
+<script>
+document.getElementById("scan").onclick = async () => {
+  try {
+    const ndef = new NDEFReader();
+
+    await ndef.scan();
+
+    console.log("スキャン開始");
+
+    ndef.addEventListener("reading", ({ message }) => {
+      for (const record of message.records) {
+        if (record.recordType === "text") {
+          const text = new TextDecoder().decode(record.data);
+          alert(text);
+        }
+      }
+    });
+  } catch (err) {
+    console.error(err);
+  }
+};
+</script>
+</body>
